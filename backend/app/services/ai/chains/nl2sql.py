@@ -1641,7 +1641,7 @@ class NL2SQLChain:
         Yields:
             生成的解释文本块
         """
-        self.logger.info(f"开始流式生成查询解释...")
+        logger.info(f"开始流式生成查询解释...")
         
         # 准备给LLM的上下文
         result_str = ""
@@ -1675,10 +1675,10 @@ class NL2SQLChain:
 - 重点突出关键数据和洞察
 """
         
-        self.logger.info(f"流式解释查询提示构建完成，长度: {len(prompt)}")
+        logger.info(f"流式解释查询提示构建完成，长度: {len(prompt)}")
         
         # 使用LLM生成解释 - 流式模式
-        self.logger.info(f"开始流式生成解释...")
+        logger.info(f"开始流式生成解释...")
         
         try:
             # 确保我们的适配器支持流式输出
@@ -1695,10 +1695,10 @@ class NL2SQLChain:
                     yield word + ' '
                     await asyncio.sleep(0.05)  # 模拟延迟
                 
-            self.logger.info(f"流式解释生成完成")
+            logger.info(f"流式解释生成完成")
             
         except Exception as e:
-            self.logger.error(f"解释生成失败: {str(e)}")
+            logger.error(f"解释生成失败: {str(e)}")
             raise
 
 

@@ -1164,19 +1164,37 @@ class LangChainAdapter:
         Yields:
             生成的文本块
         """
-        self.logger.info(f"使用模型 {self.model_name} 流式生成响应")
+        logger.info(f"使用模型 {self.model_name} 流式生成响应")
         
         try:
             # 确保我们的LLM支持流式输出
             if hasattr(self.llm, "stream") and callable(getattr(self.llm, "stream")):
-                # 适用于基于LangChain的LLM 
-                async for chunk in self.llm.stream(prompt):
-                    if isinstance(chunk, dict) and "content" in chunk:
-                        yield chunk["content"]
-                    elif hasattr(chunk, "content"):
-                        yield chunk.content
-                    else:
-                        yield str(chunk)
+                # 检查stream方法返回的是否为异步生成器
+                stream_result = self.llm.stream(prompt)
+                
+                # 判断返回值类型
+                if hasattr(stream_result, "__aiter__"):
+                    # 如果支持异步迭代，使用async for
+                    async for chunk in stream_result:
+                        if isinstance(chunk, dict) and "content" in chunk:
+                            yield chunk["content"]
+                        elif hasattr(chunk, "content"):
+                            yield chunk.content
+                        else:
+                            yield str(chunk)
+                else:
+                    # 如果是普通生成器，使用普通for循环
+                    logger.info("LLM.stream返回的是普通生成器，使用同步方式处理")
+                    for chunk in stream_result:
+                        if isinstance(chunk, dict) and "content" in chunk:
+                            yield chunk["content"]
+                        elif hasattr(chunk, "content"):
+                            yield chunk.content
+                        else:
+                            yield str(chunk)
+                        # 在同步迭代中使用yield之后，需要异步暂停一下，让事件循环有机会处理其他任务
+                        await asyncio.sleep(0)
+                        
             elif self.model_name.startswith("deepseek"):
                 # 使用DeepSeek API的流式功能
                 from openai import AsyncOpenAI
@@ -1208,7 +1226,7 @@ class LangChainAdapter:
                     yield response[i:i+2]
                     await asyncio.sleep(0.01)
         except Exception as e:
-            self.logger.error(f"流式生成出错: {str(e)}")
+            logger.error(f"流式生成出错: {str(e)}")
             # 在错误情况下，我们也要让生成器正常结束
             yield f"[生成错误: {str(e)}]"
             raise

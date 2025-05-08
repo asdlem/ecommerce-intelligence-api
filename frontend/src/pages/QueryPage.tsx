@@ -99,7 +99,11 @@ const QueryPage: React.FC = () => {
   };
   
   useEffect(() => {
-    scrollToBottom();
+    // 检查是否有消息正在生成解释，如果有则不自动滚动
+    const hasGeneratingExplanation = messages.some(msg => msg.isGeneratingExplanation);
+    if (!hasGeneratingExplanation) {
+      scrollToBottom();
+    }
   }, [messages]);
 
   // 处理SQL复制
@@ -142,6 +146,13 @@ const QueryPage: React.FC = () => {
                 explanation: (msg.explanation || '') + token
               } : msg
             ));
+            
+            // 找到包含解释内容的元素，如果存在则平滑滚动到该元素
+            // 注意：这里不使用scrollToBottom()，只为当前生成的内容滚动
+            const explanationElement = document.getElementById(`explanation-${messageId}`);
+            if (explanationElement) {
+              explanationElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
           },
           // 完成时更新状态
           onComplete: (fullText: string) => {
@@ -371,11 +382,12 @@ const QueryPage: React.FC = () => {
   };
 
   // 创建自定义样式的Markdown组件
-  const MarkdownContent = ({ content }: { content: string }) => {
+  const MarkdownContent = ({ content, id }: { content: string; id?: string }) => {
     if (!content) return null;
     
     return (
       <Box 
+        id={id}
         sx={{ 
           mt: 2, 
           p: 2, 
@@ -501,43 +513,6 @@ const QueryPage: React.FC = () => {
                     {message.content}
                   </Typography>
                   
-                  {/* 生成解释按钮 */}
-                  {message.canGenerateExplanation && !message.explanation && !message.isGeneratingExplanation && (
-                    <Button
-                      variant="outlined"
-                      color="primary"
-                      size="small"
-                      onClick={() => handleGenerateExplanation(message.id, (
-                        // 查找对应的用户消息
-                        messages.find(m => 
-                          m.sender === 'user' && 
-                          new Date(m.timestamp).getTime() < new Date(message.timestamp).getTime()
-                        )?.content || ''),
-                        message.sql || '',
-                        message.results || []
-                      )}
-                      sx={{ mt: 1, mb: 2 }}
-                      startIcon={<LightbulbIcon />}
-                    >
-                      生成解释
-                    </Button>
-                  )}
-                  
-                  {/* 正在生成解释提示 */}
-                  {message.isGeneratingExplanation && (
-                    <Box sx={{ display: 'flex', alignItems: 'center', mt: 1, mb: 2 }}>
-                      <CircularProgress size={16} sx={{ mr: 1 }} />
-                      <Typography variant="body2" color="text.secondary">
-                        正在生成解释...
-                      </Typography>
-                    </Box>
-                  )}
-                  
-                  {/* Markdown格式的解释内容 */}
-                  {message.explanation && (
-                    <MarkdownContent content={message.explanation} />
-                  )}
-                  
                   {/* 错误信息 */}
                   {message.error && (
                     <Alert 
@@ -610,6 +585,46 @@ const QueryPage: React.FC = () => {
                         </TableBody>
                       </Table>
                     </TableContainer>
+                  )}
+                  
+                  {/* 生成解释按钮 - 移动到查询结果表格下方 */}
+                  {message.canGenerateExplanation && !message.explanation && !message.isGeneratingExplanation && (
+                    <Button
+                      variant="outlined"
+                      color="primary"
+                      size="small"
+                      onClick={() => handleGenerateExplanation(message.id, (
+                        // 查找对应的用户消息
+                        messages.find(m => 
+                          m.sender === 'user' && 
+                          new Date(m.timestamp).getTime() < new Date(message.timestamp).getTime()
+                        )?.content || ''),
+                        message.sql || '',
+                        message.results || []
+                      )}
+                      sx={{ mt: 2, mb: 1 }}
+                      startIcon={<LightbulbIcon />}
+                    >
+                      生成解释
+                    </Button>
+                  )}
+                  
+                  {/* 正在生成解释提示 */}
+                  {message.isGeneratingExplanation && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', mt: 2, mb: 1 }}>
+                      <CircularProgress size={16} sx={{ mr: 1 }} />
+                      <Typography variant="body2" color="text.secondary">
+                        正在生成解释...
+                      </Typography>
+                    </Box>
+                  )}
+                  
+                  {/* Markdown格式的解释内容 */}
+                  {message.explanation && (
+                    <MarkdownContent 
+                      content={message.explanation} 
+                      id={`explanation-${message.id}`}
+                    />
                   )}
                   
                   {/* 建议列表 */}

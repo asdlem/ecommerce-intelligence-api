@@ -122,26 +122,50 @@ const QueryPage: React.FC = () => {
       msg.id === messageId ? {
         ...msg,
         isGeneratingExplanation: true,
+        explanation: '', // 初始化为空字符串，用于流式更新
         canGenerateExplanation: false // 防止重复点击
       } : msg
     ));
     
     try {
-      // 调用API生成解释
-      const data = await dataAPI.generateExplanation(userQuery, sql, results);
-      
-      if (data.success) {
-        // 更新消息，添加解释
-        setMessages(prev => prev.map(msg => 
-          msg.id === messageId ? {
-            ...msg,
-            explanation: data.data.explanation,
-            isGeneratingExplanation: false
-          } : msg
-        ));
-      } else {
-        throw new Error(data.message || '无法生成解释');
-      }
+      // 调用API生成解释 - 使用流式方式
+      await dataAPI.generateExplanation(
+        userQuery, 
+        sql, 
+        results,
+        {
+          // 收到每个文本块时更新UI
+          onToken: (token: string) => {
+            setMessages(prev => prev.map(msg => 
+              msg.id === messageId ? {
+                ...msg,
+                explanation: (msg.explanation || '') + token
+              } : msg
+            ));
+          },
+          // 完成时更新状态
+          onComplete: (fullText: string) => {
+            setMessages(prev => prev.map(msg => 
+              msg.id === messageId ? {
+                ...msg,
+                explanation: fullText,
+                isGeneratingExplanation: false
+              } : msg
+            ));
+          },
+          // 错误处理
+          onError: (error: string) => {
+            setMessages(prev => prev.map(msg => 
+              msg.id === messageId ? {
+                ...msg,
+                isGeneratingExplanation: false,
+                canGenerateExplanation: true, // 允许重试
+                error: error || '生成解释失败，请稍后重试'
+              } : msg
+            ));
+          }
+        }
+      );
     } catch (err: any) {
       console.error('生成解释出错:', err);
       

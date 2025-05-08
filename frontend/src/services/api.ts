@@ -361,26 +361,143 @@ export const dataAPI = {
   },
 
   // 生成查询结果解释
-  generateExplanation: async (query: string, sql: string, results: any[]) => {
+  generateExplanation: async (query: string, sql: string, results: any[], options?: { 
+    onToken?: (token: string) => void, 
+    onComplete?: (fullText: string) => void,
+    onError?: (error: string) => void
+  }) => {
     try {
       const token = ensureToken();
       console.log(`生成查询结果解释: "${query.substring(0, 30)}..."`);
       
-      const response = await api.post('/data/explain-results', {
-        query,
-        sql,
-        results
-      }, {
+      // 如果没有提供回调函数，则使用传统的非流式方式
+      if (!options?.onToken) {
+        const response = await api.post('/data/explain-results', {
+          query,
+          sql,
+          results
+        }, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        
+        console.log('解释生成响应:', response.data);
+        return response.data;
+      }
+      
+      // 使用流式方式
+      console.log('使用流式方式生成解释');
+      
+      // 使用fetch API来支持流式接收
+      const controller = new AbortController();
+      const signal = controller.signal;
+      
+      const response = await fetch(`${api.defaults.baseURL}/data/explain-results`, {
+        method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json'
         },
+        body: JSON.stringify({
+          query,
+          sql,
+          results
+        }),
+        signal
       });
       
-      console.log('解释生成响应:', response.data);
-      return response.data;
-    } catch (error) {
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      if (!response.body) {
+        throw new Error('Response body is null');
+      }
+      
+      // 获取流式响应
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = '';
+      
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          
+          if (done) {
+            console.log('流式响应接收完成');
+            if (options.onComplete) {
+              options.onComplete(fullText);
+            }
+            break;
+          }
+          
+          // 解码二进制数据
+          const chunk = decoder.decode(value, { stream: true });
+          
+          // 处理各个行（每行一个JSON对象）
+          const lines = chunk.split('\n').filter(line => line.trim());
+          
+          for (const line of lines) {
+            try {
+              const data = JSON.parse(line);
+              
+              if (data.error) {
+                console.error('流式响应错误:', data.error);
+                if (options.onError) {
+                  options.onError(data.error);
+                }
+                controller.abort();
+                break;
+              }
+              
+              // 如果有标记，添加到UI
+              if (data.token) {
+                fullText += data.token;
+                if (options.onToken) {
+                  options.onToken(data.token);
+                }
+              }
+              
+              // 如果是最后一块，完成处理
+              if (data.done) {
+                console.log('流式响应结束标志接收到');
+                if (options.onComplete) {
+                  // 如果服务器提供了完整文本，使用它
+                  if (data.full_text) {
+                    fullText = data.full_text;
+                  }
+                  options.onComplete(fullText);
+                }
+              }
+            } catch (e) {
+              console.error('解析JSON响应出错:', e, 'Line:', line);
+            }
+          }
+        }
+      } catch (err: any) {
+        if (err.name === 'AbortError') {
+          console.log('流式响应接收被中断');
+        } else {
+          console.error('流式响应接收出错:', err);
+          if (options.onError) {
+            options.onError(err.message || '接收解释内容时出错');
+          }
+        }
+      }
+      
+      return {
+        success: true,
+        data: {
+          explanation: fullText
+        }
+      };
+    } catch (error: any) {
       console.error('生成解释失败:', error);
+      if (options?.onError) {
+        options.onError(error.message || '生成解释失败');
+      }
       throw error;
     }
   },

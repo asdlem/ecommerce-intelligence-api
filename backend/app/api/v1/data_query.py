@@ -1,5 +1,5 @@
 ﻿from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Header, Request, Body
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from typing import Any, Dict, List, Optional, Union
 from datetime import datetime, timedelta, date
 import asyncio
@@ -677,9 +677,9 @@ async def explain_query_results(
     db: AsyncSession = Depends(get_db)
 ) -> Any:
     """
-    生成查询结果的解释
+    生成查询结果的解释 (流式响应)
     
-    接收查询、SQL和结果，生成自然语言解释
+    接收查询、SQL和结果，生成自然语言解释，以流式方式返回
     
     Args:
         request: 解释请求
@@ -687,75 +687,105 @@ async def explain_query_results(
         db: 数据库会话
         
     Returns:
-        解释内容
+        流式解释内容
     """
     start_time = datetime.now()
-    try:
-        query = request.query.strip()
-        sql = request.sql.strip()
-        results = request.results
-        
-        logger.info(f"用户({current_user.id})请求生成解释: {query}")
-        
-        # 获取nl2sql链对象
-        nl2sql_chain = get_nl2sql_chain()
-        
-        # 生成解释
-        logger.debug(f"开始生成解释")
-        explanation = await nl2sql_chain.explain_results(query, sql, results)
-        logger.info(f"解释生成完成: {explanation[:100]}...")
-        
-        # 记录到日志
-        processing_time = (datetime.now() - start_time).total_seconds()
-        from app.db.crud import ai_query_log
-        await ai_query_log.create_log(
-            db=db,
-            user_id=current_user.id,
-            query_type="explain",
-            query_text=query,
-            model_used=getattr(nl2sql_chain, "model_name", None),
-            status="success",
-            response_text=explanation,
-            processing_time=processing_time,
-            meta_info={
-                "sql": sql,
-                "results_count": len(results) if results else 0
-            }
-        )
-        
-        return {
-            "success": True,
-            "data": {
-                "explanation": explanation
-            }
-        }
-        
-    except Exception as e:
-        logger.error(f"生成解释失败: {str(e)}")
-        
-        error_detail = str(e)
-        if "traceback" not in error_detail:
-            # 捕获并记录详细堆栈信息，但不发送给客户端
-            tb = traceback.format_exc()
-            logger.error(f"解释生成异常堆栈: {tb}")
-        
-        # 记录失败日志
+    query = request.query.strip()
+    sql = request.sql.strip()
+    results = request.results
+    
+    logger.info(f"用户({current_user.id})请求流式生成解释: {query}")
+    
+    # 获取nl2sql链对象
+    nl2sql_chain = get_nl2sql_chain()
+    
+    # 记录开始到日志
+    processing_time = 0
+    
+    async def explanation_generator():
+        nonlocal processing_time
         try:
+            # 设置完成标志
+            is_complete = False
+            cumulative_text = ""
+            
+            # 这里我们假设nl2sql_chain.explain_results_stream提供了流式输出功能
+            # 如果这个方法不存在，我们需要创建这个方法或修改现有方法
+            async for token in nl2sql_chain.explain_results_stream(query, sql, results):
+                cumulative_text += token
+                # 发送JSON格式的数据块
+                yield json.dumps({
+                    "token": token,
+                    "done": False
+                }) + "\n"
+                
+                # 模拟延迟，真实环境可能不需要
+                await asyncio.sleep(0.01)
+            
+            # 发送完成标志
+            yield json.dumps({
+                "token": "",
+                "done": True,
+                "full_text": cumulative_text
+            })
+            
+            # 计算并记录处理时间
             processing_time = (datetime.now() - start_time).total_seconds()
+            
+            # 记录到日志
             from app.db.crud import ai_query_log
             await ai_query_log.create_log(
                 db=db,
                 user_id=current_user.id,
-                query_type="explain",
-                query_text=request.query,
-                status="error",
-                response_text=error_detail,
-                processing_time=processing_time
+                query_type="explain-stream",
+                query_text=query,
+                model_used=getattr(nl2sql_chain, "model_name", None),
+                status="success",
+                response_text=cumulative_text[:1000] + "..." if len(cumulative_text) > 1000 else cumulative_text,
+                processing_time=processing_time,
+                meta_info={
+                    "sql": sql,
+                    "results_count": len(results) if results else 0,
+                    "streaming": True
+                }
             )
-        except Exception as log_err:
-            logger.error(f"记录解释失败日志出错: {str(log_err)}")
-        
-        return {
-            "success": False,
-            "message": f"生成解释失败: {error_detail}"
-        } 
+            
+        except Exception as e:
+            error_detail = str(e)
+            logger.error(f"流式生成解释失败: {error_detail}")
+            
+            if "traceback" not in error_detail:
+                # 捕获并记录详细堆栈信息
+                tb = traceback.format_exc()
+                logger.error(f"解释生成异常堆栈: {tb}")
+            
+            # 发送错误信息
+            yield json.dumps({
+                "token": "",
+                "error": error_detail,
+                "done": True
+            })
+            
+            # 记录失败日志
+            try:
+                processing_time = (datetime.now() - start_time).total_seconds()
+                from app.db.crud import ai_query_log
+                await ai_query_log.create_log(
+                    db=db,
+                    user_id=current_user.id,
+                    query_type="explain-stream",
+                    query_text=request.query,
+                    status="error",
+                    response_text=error_detail,
+                    processing_time=processing_time,
+                    meta_info={
+                        "streaming": True
+                    }
+                )
+            except Exception as log_err:
+                logger.error(f"记录解释失败日志出错: {str(log_err)}")
+    
+    return StreamingResponse(
+        explanation_generator(),
+        media_type="application/x-ndjson"
+    ) 

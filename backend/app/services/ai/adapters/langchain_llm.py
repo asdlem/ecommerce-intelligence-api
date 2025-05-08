@@ -5,11 +5,12 @@
 
 import logging
 import asyncio
-from typing import Any, Dict, List, Mapping, Optional, Iterator, Union, cast, Callable
+from typing import Any, Dict, List, Mapping, Optional, Iterator, Union, cast, Callable, AsyncGenerator
 import os
 import time
 import httpx
 import requests
+import re
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import (
@@ -1152,3 +1153,62 @@ class LangChainAdapter:
             elapsed_time = time.perf_counter() - start_time
             logger.error(f"生成文本响应失败: {str(e)}, 耗时: {elapsed_time:.2f}秒")
             return f"处理请求时出错: {str(e)}"
+
+    async def generate_stream(self, prompt: str) -> AsyncGenerator[str, None]:
+        """
+        流式生成LLM响应
+        
+        Args:
+            prompt: 提示文本
+            
+        Yields:
+            生成的文本块
+        """
+        self.logger.info(f"使用模型 {self.model_name} 流式生成响应")
+        
+        try:
+            # 确保我们的LLM支持流式输出
+            if hasattr(self.llm, "stream") and callable(getattr(self.llm, "stream")):
+                # 适用于基于LangChain的LLM 
+                async for chunk in self.llm.stream(prompt):
+                    if isinstance(chunk, dict) and "content" in chunk:
+                        yield chunk["content"]
+                    elif hasattr(chunk, "content"):
+                        yield chunk.content
+                    else:
+                        yield str(chunk)
+            elif self.model_name.startswith("deepseek"):
+                # 使用DeepSeek API的流式功能
+                from openai import AsyncOpenAI
+                
+                client = AsyncOpenAI(
+                    api_key=self.api_key,
+                    base_url=self.api_base if self.api_base else "https://api.deepseek.com"
+                )
+                
+                response = await client.chat.completions.create(
+                    model=self.model_name,
+                    messages=[{"role": "user", "content": prompt}],
+                    stream=True,
+                    temperature=0.7,
+                    max_tokens=1500
+                )
+                
+                async for chunk in response:
+                    if hasattr(chunk, "choices") and chunk.choices:
+                        if hasattr(chunk.choices[0], "delta") and hasattr(chunk.choices[0].delta, "content"):
+                            delta_content = chunk.choices[0].delta.content
+                            if delta_content:
+                                yield delta_content
+            else:
+                # 回退到非流式方式，然后模拟流式输出
+                response = await self.generate(prompt)
+                # 按字符模拟流式输出
+                for i in range(0, len(response), 2):
+                    yield response[i:i+2]
+                    await asyncio.sleep(0.01)
+        except Exception as e:
+            self.logger.error(f"流式生成出错: {str(e)}")
+            # 在错误情况下，我们也要让生成器正常结束
+            yield f"[生成错误: {str(e)}]"
+            raise

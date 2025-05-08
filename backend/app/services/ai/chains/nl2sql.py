@@ -6,7 +6,7 @@
 import logging
 import json
 import re
-from typing import Any, Dict, List, Optional, Union, cast, Tuple
+from typing import Any, Dict, List, Optional, Union, cast, Tuple, AsyncGenerator
 import sqlalchemy
 from sqlalchemy import inspect, text
 import time
@@ -1628,6 +1628,78 @@ class NL2SQLChain:
         
         # 确保建议与当前查询不同
         return [s for s in default_suggestions if s.lower() != query.lower()][:3]
+    
+    async def explain_results_stream(self, query: str, sql: str, results: List[Dict]) -> AsyncGenerator[str, None]:
+        """
+        流式生成解释结果
+        
+        Args:
+            query: 用户原始查询
+            sql: 执行的SQL语句
+            results: 查询结果
+            
+        Yields:
+            生成的解释文本块
+        """
+        self.logger.info(f"开始流式生成查询解释...")
+        
+        # 准备给LLM的上下文
+        result_str = ""
+        if results and len(results) > 0:
+            result_samples = results[:10]  # 限制样本数量
+            if isinstance(result_samples[0], dict):
+                result_str = "\n".join([json.dumps(row, ensure_ascii=False, default=str) for row in result_samples])
+                if len(results) > 10:
+                    result_str += f"\n... 共{len(results)}条结果"
+            else:
+                result_str = str(result_samples)
+        else:
+            result_str = "空结果集"
+        
+        # 构建提示
+        prompt = f"""用户查询: "{query}"
+执行的SQL: {sql}
+查询结果 (最多显示10条): 
+{result_str}
+
+请解释这些查询结果，包含以下内容：
+1. 结果的简要总结
+2. 关键发现和见解
+3. 重要的数据点分析
+4. 与用户原始问题的关联性
+
+格式要求:
+- 使用Markdown格式
+- 简洁明了
+- 专业且信息丰富
+- 重点突出关键数据和洞察
+"""
+        
+        self.logger.info(f"流式解释查询提示构建完成，长度: {len(prompt)}")
+        
+        # 使用LLM生成解释 - 流式模式
+        self.logger.info(f"开始流式生成解释...")
+        
+        try:
+            # 确保我们的适配器支持流式输出
+            if hasattr(self.llm_adapter, "generate_stream"):
+                async for token in self.llm_adapter.generate_stream(prompt):
+                    yield token
+            else:
+                # 如果不支持流式输出，使用模拟的流式输出
+                full_response = await self.llm_adapter.generate(prompt)
+                
+                # 模拟流式输出 (单词级别)
+                words = full_response.split(' ')
+                for word in words:
+                    yield word + ' '
+                    await asyncio.sleep(0.05)  # 模拟延迟
+                
+            self.logger.info(f"流式解释生成完成")
+            
+        except Exception as e:
+            self.logger.error(f"解释生成失败: {str(e)}")
+            raise
 
 
 def get_nl2sql_chain(

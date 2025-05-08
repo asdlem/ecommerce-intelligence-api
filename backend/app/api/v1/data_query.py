@@ -176,6 +176,7 @@ async def data_query(
     
         # 生成结果解释（如果有结果）
         explanation = ""
+        """
         if results:
             try:
                 logger.debug("开始生成结果解释")
@@ -184,6 +185,7 @@ async def data_query(
             except Exception as e:
                 logger.error(f"生成结果解释失败: {str(e)}")
                 explanation = "无法生成解释。"
+        """
         
         # 生成可视化配置（如果需要）
         visualization_config = {}
@@ -660,4 +662,100 @@ async def execute_sql_query(
                 "message": "查询执行失败，请检查SQL语法或数据库连接"
             },
             "total": 0
+        }
+
+# 解释请求模型
+class ExplainResultsRequest(BaseModel):
+    query: str = Field(..., description="用户原始查询")
+    sql: str = Field(..., description="SQL查询语句")
+    results: List[Dict[str, Any]] = Field(..., description="查询结果")
+
+@router.post("/explain-results")
+async def explain_query_results(
+    request: ExplainResultsRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+) -> Any:
+    """
+    生成查询结果的解释
+    
+    接收查询、SQL和结果，生成自然语言解释
+    
+    Args:
+        request: 解释请求
+        current_user: 当前用户
+        db: 数据库会话
+        
+    Returns:
+        解释内容
+    """
+    start_time = datetime.now()
+    try:
+        query = request.query.strip()
+        sql = request.sql.strip()
+        results = request.results
+        
+        logger.info(f"用户({current_user.id})请求生成解释: {query}")
+        
+        # 获取nl2sql链对象
+        nl2sql_chain = get_nl2sql_chain()
+        
+        # 生成解释
+        logger.debug(f"开始生成解释")
+        explanation = await nl2sql_chain.explain_results(query, sql, results)
+        logger.info(f"解释生成完成: {explanation[:100]}...")
+        
+        # 记录到日志
+        processing_time = (datetime.now() - start_time).total_seconds()
+        from app.db.crud import ai_query_log
+        await ai_query_log.create_log(
+            db=db,
+            user_id=current_user.id,
+            query_type="explain",
+            query_text=query,
+            model_used=getattr(nl2sql_chain, "model_name", None),
+            status="success",
+            response_text=explanation,
+            processing_time=processing_time,
+            meta_info={
+                "sql": sql,
+                "results_count": len(results) if results else 0
+            }
+        )
+        
+        return {
+            "success": True,
+            "data": {
+                "explanation": explanation
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"生成解释失败: {str(e)}")
+        
+        error_detail = str(e)
+        if "traceback" not in error_detail:
+            # 捕获并记录详细堆栈信息，但不发送给客户端
+            tb = traceback.format_exc()
+            logger.error(f"解释生成异常堆栈: {tb}")
+        
+        # 记录失败日志
+        try:
+            processing_time = (datetime.now() - start_time).total_seconds()
+            from app.db.crud import ai_query_log
+            await ai_query_log.create_log(
+                db=db,
+                user_id=current_user.id,
+                query_type="explain",
+                query_text=request.query,
+                status="error",
+                response_text=error_detail,
+                processing_time=processing_time
+            )
+        except Exception as log_err:
+            logger.error(f"记录解释失败日志出错: {str(log_err)}")
+        
+        return {
+            "success": False,
+            "message": f"生成解释失败: {error_detail}"
         } 

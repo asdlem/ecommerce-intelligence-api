@@ -1,59 +1,37 @@
-# 电商智能API项目
+# 电商智能API前端项目
 
 ## 项目概述
 
-本项目是一个电商智能API系统，包含前端和后端两部分。用户可以通过自然语言提问的方式查询电商数据，系统会自动将自然语言转换为SQL查询并返回结果。前端采用模仿谷歌风格的现代化设计。
-
-### 主要功能
-
-- 用户认证（注册、登录）
-- 自然语言转SQL查询
-- 数据可视化展示
-- 历史查询记录
-- 智能推荐和建议
-
-### 技术栈
-
-- **前端**：React + TypeScript + Material UI v7
-- **后端**：Python + FastAPI
-- **数据库**：PostgreSQL
-
-### 最近优化
-
-- **性能优化**: 将SQL查询与解释生成分离，大幅提高查询响应速度
-- **用户体验**: 添加了按需加载解释功能，让用户可以自行决定是否需要详细解释
-- **防阻塞**: 增加API超时时间至60秒，解决长时间查询的超时问题
-- **界面简化**: 移除多余的执行SQL按钮，简化用户操作流程
-- **查询流程优化**: 优化流程为"查询→立即显示结果→按需解释"的模式
+本项目是电商智能API的前端界面，采用模仿谷歌风格的现代化设计。用户可通过自然语言提问的方式查询电商数据，系统将自动转换为SQL查询并返回结果。
 
 ## 目录结构
 
 ```
-project/
-  ├── frontend/           # 前端代码
-  │   ├── public/         # 静态资源
-  │   ├── src/            # 源代码
-  │   └── package.json    # 依赖配置
-  ├── backend/            # 后端代码
-  │   ├── app/            # 应用代码
-  │   └── requirements.txt # 依赖配置
-  ├── scripts/            # 辅助脚本
-  ├── docs/               # 文档
-  └── tests/              # 测试
+frontend/
+  ├── public/              # 静态资源
+  ├── src/
+  │   ├── components/      # 公共组件
+  │   ├── pages/           # 页面组件
+  │   ├── services/        # API服务
+  │   ├── utils/           # 工具函数
+  │   ├── types/           # TypeScript类型定义
+  │   ├── App.tsx          # 应用入口
+  │   ├── index.tsx        # 渲染入口
+  │   └── index.css        # 全局样式
+  ├── package.json         # 项目依赖
+  └── tsconfig.json        # TypeScript配置
 ```
 
 ## 开发规范
 
-### 前端开发规范
-
-#### 代码风格
+### 代码风格
 
 - 使用TypeScript进行开发，确保类型安全
 - 遵循函数式组件和Hooks的React编写方式
 - 使用ES6+语法特性
 - 文件命名采用PascalCase (组件) 或 camelCase (非组件)
 
-#### UI设计规范
+### UI设计规范
 
 - 采用Google风格配色方案：
   - 主色调: #4285F4 (蓝色)
@@ -62,7 +40,7 @@ project/
 - 响应式设计，适配不同屏幕尺寸
 - Material UI组件库作为基础UI框架
 
-#### 文件组织
+### 文件组织
 
 - 组件应尽可能小且专注于单一职责
 - 共享组件放在`components`目录
@@ -71,12 +49,12 @@ project/
 - 类型定义放在`types`目录
 - 工具函数和通用逻辑放在`utils`目录
 
-### 后端开发规范
+### 样式约定
 
-- 使用Python类型提示功能
-- API路由采用RESTful设计规则
-- 统一错误处理和响应格式
-- 使用异步处理长时间运行的查询
+- 使用Material UI的`sx`属性进行样式定义
+- 复杂组件可使用`styled`API创建样式化组件
+- 避免使用内联样式
+- 使用主题变量确保样式一致性
 
 ### Git提交规范
 
@@ -84,46 +62,37 @@ project/
 - 前缀使用：feat, fix, docs, style, refactor, test, chore
 - 示例: `feat: 添加用户登录页面` 或 `fix: 修复查询结果展示问题`
 
-## 安装与运行
+## 启动项目
 
-### 前端
+### 安装依赖
 
 ```powershell
-# 进入前端目录
+# 确保在frontend目录下运行
 cd frontend
-
-# 安装依赖
 npm install
+```
 
-# 开发模式启动
+### 开发模式启动
+
+```powershell
 npm start
 ```
 
-前端将在 http://localhost:3000 启动。
+应用将在 http://localhost:3000 启动。
 
-### 后端
+### 生产构建
 
 ```powershell
-# 创建虚拟环境
-python -m venv venv
-
-# 激活虚拟环境
-.\venv\Scripts\Activate.ps1
-
-# 安装依赖
-pip install -r requirements.txt
-
-# 启动服务器
-python start_server.py
+npm run build
 ```
 
-后端API将在 http://localhost:8000 启动。
+构建文件将生成在 `build` 目录下。
 
 ## 后端API接口文档
 
 ### 基础信息
 
-- 基础URL: `http://localhost:8000/api/v1`
+- 基础URL: `http://localhost:8000/api`
 - 认证方式: Bearer Token
 
 ### 认证相关接口
@@ -347,31 +316,19 @@ python start_server.py
    <Grid size={{ xs: 12, sm: 6, md: 3 }}></Grid>
    ```
 
-### 常见问题排查
+### Windows开发注意事项
 
-#### API请求问题
+- 在Windows系统中开发时，请使用PowerShell运行命令
+- 确保在frontend目录下运行npm命令，不要在项目根目录运行
+- 使用正向斜杠(/)而非反斜杠(\\)表示路径，以避免转义问题
 
-1. 确认后端服务是否正常运行
-2. 检查API基础URL配置（应为`/api/v1`而非`/api`）
-3. 验证认证令牌是否正确发送
-4. 对于登录请求，确保使用正确的表单格式（URLSearchParams）
-5. 使用浏览器开发者工具网络面板检查请求和响应
+## 常见问题
 
-#### 前端组件渲染问题
+### Q: 组件样式不正确怎么办？
+A: 检查是否正确使用了Material UI v7的新API，特别是Grid组件的变化。
 
-1. 检查控制台是否有错误信息
-2. 确认使用的是Material UI v7兼容的组件API
-3. 验证数据结构是否与组件期望的格式一致
+### Q: API请求失败怎么办？
+A: 确保后端服务已启动，且API基础URL配置正确。检查认证token是否正确设置。
 
-## 贡献指南
-
-1. Fork本仓库
-2. 创建功能分支 (`git checkout -b feature/amazing-feature`)
-3. 提交更改 (`git commit -m 'feat: add some amazing feature'`)
-4. 推送到分支 (`git push origin feature/amazing-feature`)
-5. 创建Pull Request
-
-## 联系与支持
-
-如有问题或建议，请提交Issue或联系项目维护者。
-
+### Q: 如何添加新页面？
+A: 在pages目录下创建新组件，然后在routes.tsx中添加路由配置。

@@ -1,0 +1,61 @@
+{
+  "project": {
+    "name": "ECommerceEfficiencyAgent",
+    "description": "通过AI能力为电商场景提供智能化功能的效率提升工具",
+    "version": "0.1.0",
+    "api_v1_str": "/api/v1"
+  },
+  "cors": {
+    "origins": [
+      "*"
+    ]
+  },
+  "database": {
+    "type": "mysql",
+    "host": "localhost",
+    "port": 3306,
+    "user": "root",
+    "password": "${DB_PASSWORD}",
+    "db": "agent_db",
+    "echo": false
+  },
+  "jwt": {
+    "access_token_expire_minutes": 11520
+  },
+  "ai_models": {
+    "default_ai_model": "deepseek",
+    "enable_reasoning": true,
+    "deepseek": {
+      "api_key": "${DEEPSEEK_API_KEY}",
+      "api_base": "https://api.deepseek.com",
+      "model": "deepseek-chat",
+      "http_referer": "https://agent.example.com",
+      "x_title": "ECommerceEfficiencyAgent"
+    },
+    "openrouter": {
+      "api_key": "${OPENROUTER_API_KEY}",
+      "api_base": "https://openrouter.ai/api/v1",
+      "model": "deepseek/deepseek-chat-v3-0324:free",
+      "http_referer": "https://agent.example.com",
+      "x_title": "ECommerceEfficiencyAgent"
+    }
+  },
+  "vector_store": {
+    "type": "chroma",
+    "url": null,
+    "api_key": null,
+    "collection_name": "ecommerce_knowledge"
+  },
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  },
+  "admin": {
+    "initial_admin_password": "${ADMIN_PASSWORD}"
+  },
+  "sql_security": {
+    "dangerous_keywords": ["UPDATE", "DELETE", "DROP", "ALTER", "CREATE", "TRUNCATE"],
+    "enforce_read_only": true,
+    "auto_limit": 100
+  }
+}
